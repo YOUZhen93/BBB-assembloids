@@ -440,3 +440,105 @@ ylab("Percentage (%)") + scale_y_continuous(expand=c(0,0))
 dev.off()
 
 
+
+# DEGs CCM and UHC
+pbmc = readRDS("CCM_UHC_merged_SeuratObj.RDS")
+dfccm = as.data.frame(table(Idents(pbmc[,pbmc$group == "CCM"])))
+dfuhc = as.data.frame(table(Idents(pbmc[,pbmc$group == "UHC"])))
+dfccm = dfccm[which(dfccm$Freq > 10), ]
+dfuhc = dfuhc[which(dfuhc$Freq > 10), ]
+
+celltypes = intersect(dfccm$Var, dfuhc$Var)
+
+DEG = list()
+for (i in celltypes) {
+	temp = pbmc[,Idents(pbmc) == i]
+	x = FindMarkers(temp, group.by="group", ident.1 = "UHC", ident.2 = "CCM", logfc.threshold=0.2, min.pct=0.2, only.pos = F)
+	x = x[which(x$p_val_adj < 0.05), ]; 
+	x$genes = rownames(x); x$celltype = i
+	DEG[[i]] = x
+	print(paste0("celltype ", i, " is done."))
+}
+
+Fin = do.call(rbind, DEG)
+write.table(Fin, "UHCvsCCM_DEGs_celltypes_res.xls", sep="\t", quote=F, col.names = T, row.names = F)
+
+
+options(stringsAsFactors=F)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(ggplot2)
+library(multienrichjam)
+library(R.utils)
+library(openxlsx)
+
+markers = read.table("../UHCvsCCM_DEGs_celltypes_res.xls", sep="\t", header = T)
+backgrounds = read.table("background_genes_list.txt", header=F)$V1
+backgrounds = bitr(backgrounds, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Hs.eg.db")
+
+dofunctionenrich <- function(backgrounds, cluster) {
+	print(cluster)
+	y = markers[which(markers$celltype == cluster), ]
+	geneList = y$avg_log2FC[which(y$avg_log2FC>0)]
+	names(geneList) = y$genes[which(y$avg_log2FC>0)]
+	print(length(geneList))
+	
+	eg = bitr(names(geneList), fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Hs.eg.db")
+	eg$FC = geneList[match(eg$SYMBOL, names(geneList))]
+	geneList = eg$FC; names(geneList) = eg$ENTREZID
+	keggup1 = enrichKEGG(names(geneList), universe = backgrounds$ENTREZID, organism = "hsa", 
+	                    keyType = "kegg", pvalueCutoff = 0.05, pAdjustMethod = 'BH', minGSSize = 7, 
+	                    qvalueCutoff = 0.05, use_internal_data = F)
+	keggup1 = keggup1@result
+	keggup1$regulation = "UP"; keggup1$class = "KEGG"
+	ego1 <- enrichGO(gene = names(geneList),
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "fdr",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05, 
+                readable      = TRUE)
+    ego1 = ego1@result
+    ego1$regulation = "UP"; ego1$class = "GO"
+    res1 = rbind(ego1, keggup1)
+
+
+	y = markers[which(markers$celltype == cluster), ]
+	geneList = y$avg_log2FC[which(y$avg_log2FC < 0)]
+	names(geneList) = y$genes[which(y$avg_log2FC < 0)]
+
+	eg = bitr(names(geneList), fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Hs.eg.db")
+	eg$FC = geneList[match(eg$SYMBOL, names(geneList))]
+	geneList = eg$FC; names(geneList) = eg$ENTREZID
+	keggup2 = enrichKEGG(names(geneList), universe = backgrounds$ENTREZID, organism = "hsa", 
+	                    keyType = "kegg", pvalueCutoff = 0.05, pAdjustMethod = 'BH', minGSSize = 7, 
+	                    qvalueCutoff = 0.05, use_internal_data = F)
+	keggup2 = keggup2@result
+	keggup2$regulation = "DOWN"; keggup2$class = "KEGG"
+	ego2 <- enrichGO(gene = names(geneList),
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "fdr",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05, 
+                readable      = TRUE)
+    ego2 = ego2@result
+    ego2$regulation = "DOWN"; ego2$class = "GO"
+    res2 = rbind(ego2, keggup2)
+
+    res = rbind(res1, res2)
+    return(res)    
+}
+
+x = lapply(unique(markers$celltype)[-10], function(i) dofunctionenrich(backgrounds, i))
+
+names(x) = c("Ast 1", "Ast 2", "Ast 3", "NPs", "GABAs", "GluNs 1", "GluNs 2", "GluNs 3", "GluNs 4", 
+	"Pro Ast", "Pro GABAs", "VLMCs 1", "VLMCs 2", "VEs 1", "Peri 1", "Peri 2", "Fib", "PCs")
+openxlsx::write.xlsx(x, "UHCvsCCM_DEGs_GO_KEGG_analysis_result.xlsx")
+
+
+
+
+
+
