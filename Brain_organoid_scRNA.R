@@ -15,7 +15,7 @@ generate double_res.tsv for each batch
 
 
 # workdir
-/public/home/gonglianggroup/zheny/temp/Brain_Organoid
+/temp/Brain_Organoid
 
 
 options(stringsAsFactors=F)
@@ -57,7 +57,7 @@ sapply(filelist, creatSeuO)
 
 ## Step 2.
 
-setwd("/public/home/gonglianggroup/zheny/temp/Brain_Organoid")
+setwd("/temp/Brain_Organoid")
 filelist = c('filtered_feature_bc_matrix_CCM_One','filtered_feature_bc_matrix_CCM_Sec','filtered_feature_bc_matrix_CCM_Third',
 	'filtered_feature_bc_matrix_UHC_One','filtered_feature_bc_matrix_UHC_Sec','filtered_feature_bc_matrix_UHC_Third')
 
